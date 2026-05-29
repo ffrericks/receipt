@@ -34,4 +34,18 @@ router.put('/:id', auth, async (req, res, next) => {
   }
 });
 
+router.delete('/:id', auth, async (req, res, next) => {
+  try {
+    const preset = await Preset.findByPk(req.params.id);
+    if (!preset) return res.status(404).json({ error: 'Preset niet gevonden.' });
+    if (parseInt(req.params.id) <= 2) {
+      return res.status(403).json({ error: 'Standaard presets kunnen niet worden verwijderd.' });
+    }
+    await preset.destroy();
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = router;

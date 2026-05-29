@@ -5,44 +5,53 @@
       <button class="logout-btn" @click="logout" title="Uitloggen">↩</button>
     </header>
 
-    <div class="preset-row">
-      <label class="preset-label">Winkel / preset</label>
-      <select v-model="selectedPreset" class="input preset-select">
-        <option v-for="p in presets.list" :key="p.id" :value="p.id">{{ p.name }}</option>
-      </select>
-    </div>
-
+    <!-- Scan knoppen -->
     <div class="action-cards">
-      <router-link to="/scan" class="action-card primary">
+      <router-link :to="`/scan?preset=${selectedPreset}`" class="action-card primary">
         <span class="action-icon">📷</span>
         <span class="action-label">Bon scannen</span>
       </router-link>
-      <router-link to="/scan?mode=upload" class="action-card">
-        <span class="action-icon">📁</span>
-        <span class="action-label">Afbeelding kiezen</span>
-      </router-link>
+      <div class="preset-pick">
+        <label class="preset-label">Preset</label>
+        <select v-model="selectedPreset" class="input preset-select">
+          <option v-for="p in presetsStore.list" :key="p.id" :value="p.id">{{ p.name }}</option>
+        </select>
+      </div>
     </div>
 
+    <!-- Navigatie -->
+    <nav class="nav-row">
+      <router-link to="/winkels" class="nav-item">
+        <span class="nav-icon">🏪</span>
+        <span>Winkels</span>
+      </router-link>
+      <router-link to="/presets" class="nav-item">
+        <span class="nav-icon">⚙️</span>
+        <span>Presets</span>
+      </router-link>
+    </nav>
+
+    <!-- Recente bons -->
     <section class="recent">
       <h2 class="section-title">Recente bons</h2>
 
-      <div v-if="receipts.loading" class="loading">Laden...</div>
+      <div v-if="receiptsStore.loading" class="loading">Laden...</div>
 
-      <div v-else-if="receipts.list.length === 0" class="empty">
-        Nog geen bons opgeslagen.
+      <div v-else-if="receiptsStore.list.length === 0" class="empty">
+        Nog geen bons. Scan je eerste bon!
       </div>
 
       <div v-else class="receipt-list">
         <router-link
-          v-for="r in receipts.list"
+          v-for="r in receiptsStore.list"
           :key="r.id"
-          :to="`/winkel/${r.store_id}`"
+          :to="r.store_id ? `/winkel/${r.store_id}` : '#'"
           class="receipt-item card"
         >
           <div class="receipt-store">{{ r.Store?.name || 'Onbekende winkel' }}</div>
           <div class="receipt-meta">
             <span>{{ formatDate(r.receipt_date || r.scan_date) }}</span>
-            <span v-if="r.total_amount" class="receipt-amount">€ {{ formatAmount(r.total_amount) }}</span>
+            <span v-if="r.total_amount" class="receipt-amount">€ {{ fmt(r.total_amount) }}</span>
           </div>
           <span class="receipt-status" :class="r.status">{{ r.status === 'ok' ? '✓' : '?' }}</span>
         </router-link>
@@ -59,14 +68,14 @@ import { useReceiptsStore } from '../stores/receipts';
 import { usePresetsStore } from '../stores/presets';
 
 const auth = useAuthStore();
-const receipts = useReceiptsStore();
-const presets = usePresetsStore();
+const receiptsStore = useReceiptsStore();
+const presetsStore = usePresetsStore();
 const router = useRouter();
 const selectedPreset = ref(1);
 
 onMounted(async () => {
-  await Promise.all([presets.fetchAll(), receipts.fetchAll()]);
-  if (presets.list.length > 0) selectedPreset.value = presets.list[0].id;
+  await Promise.all([presetsStore.fetchAll(), receiptsStore.fetchAll()]);
+  if (presetsStore.list.length > 0) selectedPreset.value = presetsStore.list[0].id;
 });
 
 function logout() {
@@ -79,7 +88,7 @@ function formatDate(d) {
   return new Date(d).toLocaleDateString('nl-NL');
 }
 
-function formatAmount(a) {
+function fmt(a) {
   return parseFloat(a).toFixed(2).replace('.', ',');
 }
 </script>
@@ -99,15 +108,12 @@ function formatAmount(a) {
   padding: 4px;
   color: var(--gray-600);
 }
-.preset-row { margin-bottom: 20px; }
-.preset-label { font-size: 13px; color: var(--gray-600); display: block; margin-bottom: 6px; }
-.preset-select { margin-top: 0; }
 
 .action-cards {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
-  margin-bottom: 28px;
+  margin-bottom: 16px;
 }
 .action-card {
   display: flex;
@@ -118,18 +124,46 @@ function formatAmount(a) {
   padding: 20px;
   border-radius: var(--radius);
   text-decoration: none;
-  color: var(--gray-800);
+  color: #fff;
+  background: var(--blue);
+}
+.action-icon { font-size: 28px; }
+.action-label { font-weight: 600; font-size: 14px; }
+
+.preset-pick {
   background: var(--gray-100);
+  border-radius: var(--radius);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.preset-label { font-size: 12px; color: var(--gray-600); font-weight: 600; }
+.preset-select { padding: 8px 10px; font-size: 14px; }
+
+.nav-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+.nav-item {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  border-radius: var(--radius);
+  background: var(--gray-100);
+  text-decoration: none;
+  color: var(--gray-800);
+  font-size: 14px;
+  font-weight: 600;
   border: 2px solid transparent;
   transition: border-color .15s;
 }
-.action-card.primary {
-  background: var(--blue);
-  color: #fff;
-}
-.action-card:hover { border-color: var(--blue); }
-.action-icon { font-size: 28px; }
-.action-label { font-weight: 600; font-size: 14px; }
+.nav-item:hover { border-color: var(--blue); }
+.nav-icon { font-size: 18px; }
 
 .section-title { font-size: 16px; font-weight: 700; margin: 0 0 12px; }
 .loading, .empty { color: var(--gray-600); font-size: 14px; }
@@ -141,7 +175,6 @@ function formatAmount(a) {
   gap: 12px;
   text-decoration: none;
   color: inherit;
-  position: relative;
 }
 .receipt-store { font-weight: 600; flex: 1; }
 .receipt-meta {

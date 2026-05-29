@@ -6,7 +6,9 @@ const routes = [
   { path: '/', component: () => import('../views/HomeView.vue') },
   { path: '/scan', component: () => import('../views/ScanView.vue') },
   { path: '/bevestiging', component: () => import('../views/ConfirmView.vue') },
+  { path: '/winkels', component: () => import('../views/StoresView.vue') },
   { path: '/winkel/:id', component: () => import('../views/StoreView.vue') },
+  { path: '/presets', component: () => import('../views/PresetsView.vue') },
 ];
 
 const router = createRouter({

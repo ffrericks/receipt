@@ -1,8 +1,25 @@
 const { Preset } = require('../models');
 
 async function parse(rawText, presetId) {
-  const preset = await Preset.findByPk(presetId);
-  const config = preset ? preset.config : getDefaultConfig();
+  // Try to auto-detect a better-matching preset by scanning all keywords
+  const allPresets = await Preset.findAll();
+  let config = null;
+  let detectedPresetId = presetId;
+
+  for (const p of allPresets) {
+    const keywords = p.config?.store_name_keywords || [];
+    const lower = rawText.toLowerCase();
+    if (keywords.length > 0 && keywords.some(kw => lower.includes(kw.toLowerCase()))) {
+      config = p.config;
+      detectedPresetId = p.id;
+      break;
+    }
+  }
+
+  if (!config) {
+    const selected = allPresets.find(p => p.id === parseInt(presetId));
+    config = selected ? selected.config : getDefaultConfig();
+  }
 
   const result = {
     store_name: null,
@@ -10,7 +27,8 @@ async function parse(rawText, presetId) {
     receipt_date: null,
     items: [],
     loyalty_points: null,
-    confidence: 'low'
+    confidence: 'low',
+    preset_id: detectedPresetId
   };
 
   if (config.fields?.total_amount) {
