@@ -472,6 +472,7 @@ docker compose up -d
 ### Fase 5 — n8n & afwerking
 - [ ] Optionele webhook naar n8n
 - [ ] PWA installeerbaar op telefoon (manifest + service worker)
+- [ ] Favicon voor website en PWA: 🧾
 - [ ] Statistieken: uitgaven per maand/winkel
 - [ ] Automatische DB-backup script
 
