@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
 const upload = require('../middleware/upload');
-const { Receipt, ReceiptItem, Store } = require('../models');
+const { Receipt, ReceiptItem, Store, LoyaltyPoints } = require('../models');
 
 router.post('/scan', auth, upload.single('image'), async (req, res, next) => {
   try {
@@ -22,7 +22,7 @@ router.post('/scan', auth, upload.single('image'), async (req, res, next) => {
 
 router.post('/', auth, async (req, res, next) => {
   try {
-    const { store_name, receipt_date, total_amount, raw_text, image_path, status, items } = req.body;
+    const { store_name, receipt_date, total_amount, raw_text, image_path, status, items, loyalty_points } = req.body;
     if (!raw_text) return res.status(400).json({ error: 'raw_text is verplicht.' });
 
     let store_id = req.body.store_id || null;
@@ -46,6 +46,25 @@ router.post('/', auth, async (req, res, next) => {
 
     if (items && items.length > 0) {
       await ReceiptItem.bulkCreate(items.map(i => ({ ...i, receipt_id: receipt.id })));
+    }
+
+    if (store_id && loyalty_points?.earned != null) {
+      // Bereken nieuw saldo op basis van laatste bekende saldo voor deze winkel
+      const last = await LoyaltyPoints.findOne({
+        where: { store_id },
+        order: [['scan_date', 'DESC']]
+      });
+      const prevBalance = last ? last.points_balance : 0;
+      const newBalance = loyalty_points.balance != null
+        ? loyalty_points.balance
+        : prevBalance + loyalty_points.earned;
+
+      await LoyaltyPoints.create({
+        store_id,
+        receipt_id: receipt.id,
+        points_earned: loyalty_points.earned,
+        points_balance: newBalance
+      });
     }
 
     const webhook = require('../services/webhook');

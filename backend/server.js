@@ -23,6 +23,8 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/receipts', require('./routes/receipts'));
 app.use('/api/stores', require('./routes/stores'));
 app.use('/api/presets', require('./routes/presets'));
+app.use('/api/n8n', require('./routes/n8n'));
+app.use('/api/stats', require('./routes/stats'));
 
 app.use(errorHandler);
 

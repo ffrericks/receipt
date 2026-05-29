@@ -6,7 +6,17 @@ const { Store, Receipt, LoyaltyPoints, Preset } = require('../models');
 router.get('/', auth, async (req, res, next) => {
   try {
     const stores = await Store.findAll({ include: [{ model: Preset, attributes: ['id', 'name'] }] });
-    res.json(stores);
+
+    // Voeg huidig puntensaldo toe per winkel (laatste record per store)
+    const storesWithPoints = await Promise.all(stores.map(async s => {
+      const last = await LoyaltyPoints.findOne({
+        where: { store_id: s.id },
+        order: [['scan_date', 'DESC']]
+      });
+      return { ...s.toJSON(), points_balance: last ? last.points_balance : null };
+    }));
+
+    res.json(storesWithPoints);
   } catch (err) {
     next(err);
   }

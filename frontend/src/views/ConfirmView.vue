@@ -119,13 +119,14 @@ async function save() {
   saving.value = true;
   error.value = null;
   const payload = {
-    store_name:   form.value.store_name || null,
-    raw_text:     result.value.raw_text,
-    image_path:   result.value.image_path,
-    receipt_date: form.value.receipt_date || null,
-    total_amount: form.value.total_amount !== '' ? form.value.total_amount : null,
-    items:        form.value.items,
-    status:       result.value.parsed?.confidence === 'high' ? 'ok' : 'review'
+    store_name:     form.value.store_name || null,
+    raw_text:       result.value.raw_text,
+    image_path:     result.value.image_path,
+    receipt_date:   form.value.receipt_date || null,
+    total_amount:   form.value.total_amount !== '' ? form.value.total_amount : null,
+    items:          form.value.items,
+    loyalty_points: form.value.loyalty_points,
+    status:         result.value.parsed?.confidence === 'high' ? 'ok' : 'review'
   };
   const saved = await receipts.save(payload);
   saving.value = false;
