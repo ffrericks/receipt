@@ -1,0 +1,22 @@
+{
+  "name": "Slager",
+  "store_name_keywords": ["slager", "vlees", "butcher"],
+  "fields": {
+    "total_amount": true,
+    "items": true,
+    "receipt_date": true,
+    "loyalty_points": {
+      "enabled": true,
+      "regex": "punten[:\\s]+(\\d+)",
+      "balance_regex": "saldo[:\\s]+(\\d+)"
+    }
+  },
+  "item_categories": {
+    "default": "Vlees",
+    "keywords": {
+      "gehakt": "Rund",
+      "kip": "Gevogelte",
+      "worst": "Worst"
+    }
+  }
+}

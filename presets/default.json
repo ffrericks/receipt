@@ -1,0 +1,12 @@
+{
+  "name": "Standaard",
+  "store_name_keywords": [],
+  "fields": {
+    "total_amount": true,
+    "items": false,
+    "receipt_date": true,
+    "loyalty_points": {
+      "enabled": false
+    }
+  }
+}
