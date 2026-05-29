@@ -63,19 +63,19 @@
       </div>
 
       <div v-else class="receipt-list">
-        <router-link
+        <div
           v-for="r in receiptsStore.list"
           :key="r.id"
-          :to="r.store_id ? `/winkel/${r.store_id}` : '#'"
           class="receipt-item card"
         >
+          <router-link :to="`/bon/${r.id}`" class="receipt-edit-link" title="Bewerken">✎</router-link>
           <div class="receipt-store">{{ r.Store?.name || 'Onbekende winkel' }}</div>
           <div class="receipt-meta">
             <span>{{ formatDate(r.receipt_date || r.scan_date) }}</span>
             <span v-if="r.total_amount" class="receipt-amount">€ {{ fmt(r.total_amount) }}</span>
           </div>
           <span class="receipt-status" :class="r.status">{{ r.status === 'ok' ? '✓' : '?' }}</span>
-        </router-link>
+        </div>
       </div>
     </section>
   </div>
@@ -223,8 +223,13 @@ function fmt(a) {
   display: flex;
   align-items: center;
   gap: 12px;
-  text-decoration: none;
   color: inherit;
+}
+.receipt-edit-link {
+  font-size: 16px;
+  color: var(--gray-600);
+  text-decoration: none;
+  flex-shrink: 0;
 }
 .receipt-store { font-weight: 600; flex: 1; }
 .receipt-meta {

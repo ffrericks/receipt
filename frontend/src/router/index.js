@@ -10,6 +10,7 @@ const routes = [
   { path: '/winkel/:id', component: () => import('../views/StoreView.vue') },
   { path: '/presets', component: () => import('../views/PresetsView.vue') },
   { path: '/statistieken', component: () => import('../views/StatisticsView.vue') },
+  { path: '/bon/:id', component: () => import('../views/ReceiptDetailView.vue') },
 ];
 
 const router = createRouter({

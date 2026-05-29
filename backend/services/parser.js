@@ -118,19 +118,30 @@ function extractStoreName(text, keywords) {
 
 function extractItems(text, itemCategories) {
   const items = [];
-  const itemPattern = /^(.+?)\s+(\d+[.,]\d{2})\s*$/;
 
   for (const line of text.split('\n')) {
     const clean = line.trim();
-    const m = clean.match(itemPattern);
-    if (!m) continue;
+    if (!clean) continue;
 
+    // Kortingsregel: begint met - of bevat kortingskeyword, gevolgd door bedrag
+    const discountMatch = clean.match(/^[-]?\s*(korting|actie|aanbieding|discount|statiegeld terug)[^\d]*(\d+[.,]\d{2})/i)
+      || clean.match(/^-\s*(\d+[.,]\d{2})\s*$/);
+    if (discountMatch) {
+      const amount = parseFloat((discountMatch[2] || discountMatch[1]).replace(',', '.'));
+      const description = discountMatch[1] && isNaN(discountMatch[1].replace(',', '.'))
+        ? discountMatch[1]
+        : 'Korting';
+      items.push({ description, line_total: -amount, category: 'Korting' });
+      continue;
+    }
+
+    // Normale artikelregel: omschrijving gevolgd door bedrag
+    const m = clean.match(/^(.+?)\s+(\d+[.,]\d{2})\s*$/);
+    if (!m) continue;
     const description = m[1].trim();
     const price = parseFloat(m[2].replace(',', '.'));
     if (description.length < 2 || price <= 0) continue;
-
-    // Skip total-like lines
-    if (/totaal|te betalen|btw|discount/i.test(description)) continue;
+    if (/totaal|te betalen|btw/i.test(description)) continue;
 
     const category = resolveCategory(description, itemCategories);
     items.push({ description, line_total: price, category });

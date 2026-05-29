@@ -108,4 +108,57 @@ router.get('/:id', auth, async (req, res, next) => {
   }
 });
 
+router.put('/:id', auth, async (req, res, next) => {
+  try {
+    const receipt = await Receipt.findByPk(req.params.id);
+    if (!receipt) return res.status(404).json({ error: 'Bon niet gevonden.' });
+
+    const { store_name, receipt_date, total_amount, status, items } = req.body;
+
+    // Winkel bijwerken / aanmaken
+    let store_id = req.body.store_id || receipt.store_id;
+    if (store_name) {
+      const slug = store_name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+      const [store] = await Store.findOrCreate({
+        where: { slug },
+        defaults: { name: store_name, slug }
+      });
+      store_id = store.id;
+    }
+
+    await receipt.update({
+      store_id,
+      receipt_date: receipt_date !== undefined ? receipt_date || null : receipt.receipt_date,
+      total_amount: total_amount !== undefined ? total_amount || null : receipt.total_amount,
+      status: status || receipt.status
+    });
+
+    // Artikelen vervangen als meegegeven
+    if (items !== undefined) {
+      await ReceiptItem.destroy({ where: { receipt_id: receipt.id } });
+      if (items.length > 0) {
+        await ReceiptItem.bulkCreate(items.map(i => ({ ...i, receipt_id: receipt.id })));
+      }
+    }
+
+    const updated = await Receipt.findByPk(receipt.id, {
+      include: [{ model: Store }, { model: ReceiptItem, as: 'items' }]
+    });
+    res.json(updated);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/:id', auth, async (req, res, next) => {
+  try {
+    const receipt = await Receipt.findByPk(req.params.id);
+    if (!receipt) return res.status(404).json({ error: 'Bon niet gevonden.' });
+    await receipt.destroy();
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = router;

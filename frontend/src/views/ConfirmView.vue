@@ -62,15 +62,27 @@
         </div>
       </div>
 
-      <!-- Items -->
+      <!-- Items + som-controle -->
       <div v-if="form.items.length > 0" class="card items-card">
         <div class="items-header">
           <span class="section-title">Artikelen ({{ form.items.length }})</span>
         </div>
-        <div v-for="(item, i) in form.items" :key="i" class="item-row">
+        <div v-for="(item, i) in form.items" :key="i"
+             class="item-row" :class="{ 'is-discount': item.line_total < 0 }">
           <span class="item-desc">{{ item.description }}</span>
-          <span class="item-price">€ {{ fmt(item.line_total) }}</span>
+          <span class="item-price" :class="{ discount: item.line_total < 0 }">
+            {{ item.line_total < 0 ? '−' : '' }} € {{ fmt(Math.abs(item.line_total)) }}
+          </span>
         </div>
+        <div class="items-sum-row">
+          <span>Som artikelen</span>
+          <span :class="sumMismatch ? 'sum-mismatch' : 'sum-ok'">€ {{ fmt(Math.abs(itemsSum)) }}</span>
+        </div>
+      </div>
+
+      <div v-if="sumMismatch" class="sum-warning">
+        ⚠ Artikelsom (€ {{ fmt(Math.abs(itemsSum)) }}) komt niet overeen met totaal
+        (€ {{ fmt(parseFloat(form.total_amount)) }}) — klopt er een bedrag niet?
       </div>
 
       <!-- OCR tekst + trainen -->
@@ -162,6 +174,15 @@ const form = ref({
 const ocrLines = computed(() =>
   (result.value?.raw_text || '').split('\n').map(l => l.trim()).filter(Boolean)
 );
+
+const itemsSum = computed(() =>
+  form.value.items.reduce((s, i) => s + parseFloat(i.line_total || 0), 0)
+);
+
+const sumMismatch = computed(() => {
+  if (!form.value.total_amount || form.value.items.length === 0) return false;
+  return Math.abs(itemsSum.value - parseFloat(form.value.total_amount)) > 0.05;
+});
 
 const activePresetName = computed(() =>
   presetsStore.list.find(p => p.id === activePresetId.value)?.name || 'Onbekend'
@@ -324,7 +345,7 @@ async function save() {
 .euro-sign { font-size: 15px; color: var(--gray-600); }
 .amount-input { flex: 1; }
 
-.items-card { margin-bottom: 12px; }
+.items-card { margin-bottom: 8px; }
 .items-header { margin-bottom: 8px; }
 .section-title { font-size: 14px; font-weight: 700; }
 .item-row {
@@ -335,6 +356,20 @@ async function save() {
 .item-row:last-child { border-bottom: none; }
 .item-desc { flex: 1; margin-right: 12px; }
 .item-price { font-weight: 600; white-space: nowrap; }
+.item-price.discount { color: #6366f1; }
+.items-sum-row {
+  display: flex; justify-content: space-between;
+  padding: 8px 0 0; font-size: 14px; font-weight: 700;
+  border-top: 2px solid var(--gray-200); margin-top: 4px;
+}
+.sum-ok { color: var(--green); }
+.sum-mismatch { color: var(--red); }
+.sum-warning {
+  background: #fef9c3; border: 1px solid #fde68a;
+  border-radius: var(--radius); padding: 10px 14px;
+  font-size: 13px; font-weight: 600; color: #92400e;
+  margin-bottom: 12px;
+}
 
 .raw-toggle {
   display: flex; justify-content: space-between; align-items: center;
