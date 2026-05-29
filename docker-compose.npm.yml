@@ -1,0 +1,58 @@
+version: "3.9"
+
+# Voor gebruik met een externe reverse proxy zoals Nginx Proxy Manager.
+# NPM regelt SSL en het domein. Interne proxy op poort 8088.
+
+services:
+
+  frontend:
+    image: ghcr.io/ffrericks/receipt-frontend:latest
+    restart: unless-stopped
+
+  backend:
+    image: ghcr.io/ffrericks/receipt-backend:latest
+    restart: unless-stopped
+    environment:
+      - DB_HOST=db
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+      - JWT_SECRET=${JWT_SECRET}
+      - APP_USER=${APP_USER}
+      - APP_PASSWORD=${APP_PASSWORD}
+      - N8N_WEBHOOK_URL=${N8N_WEBHOOK_URL}
+      - N8N_API_KEY=${N8N_API_KEY}
+    volumes:
+      - ./data/uploads:/app/uploads
+      - ./presets:/app/presets
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD=${DB_ROOT_PASSWORD}
+      - MYSQL_DATABASE=${DB_NAME}
+      - MYSQL_USER=${DB_USER}
+      - MYSQL_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - ./data/mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  proxy:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "8088:80"
+    volumes:
+      - ./nginx/nginx-casaos.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
+      - backend
