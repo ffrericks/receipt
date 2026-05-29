@@ -39,11 +39,13 @@ services:
       - MYSQL_PASSWORD=${DB_PASSWORD}
     volumes:
       - /DATA/AppData/kassabon/mysql:/var/lib/mysql
+      - /DATA/AppData/kassabon/schema.sql:/docker-entrypoint-initdb.d/schema.sql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD}"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
 
   proxy:
     image: nginx:alpine
