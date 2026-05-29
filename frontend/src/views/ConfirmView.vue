@@ -9,6 +9,26 @@
 
     <div v-else class="confirm-content">
 
+      <!-- Preset selector — altijd zichtbaar bovenaan -->
+      <div class="preset-bar card">
+        <span class="preset-bar-label">Preset</span>
+
+        <template v-if="!showNewPreset">
+          <select v-model="activePresetId" class="input preset-select">
+            <option v-for="p in presetsStore.list" :key="p.id" :value="p.id">
+              {{ p.name }}
+            </option>
+          </select>
+          <button class="new-preset-btn" @click="showNewPreset = true" title="Nieuwe preset aanmaken">+</button>
+        </template>
+
+        <template v-else>
+          <input v-model="newPresetName" class="input" placeholder="Naam nieuwe preset" autofocus />
+          <button class="new-preset-btn save" @click="createPreset" :disabled="!newPresetName.trim()">✓</button>
+          <button class="new-preset-btn cancel" @click="showNewPreset = false; newPresetName = ''">✕</button>
+        </template>
+      </div>
+
       <div class="confidence-badge" :class="result.parsed?.confidence">
         Zekerheid: {{ confidenceLabel }}
         <span v-if="result.parsed?.confidence !== 'high'"> — controleer de gegevens</span>
@@ -53,7 +73,7 @@
         </div>
       </div>
 
-      <!-- OCR tekst + preset trainen -->
+      <!-- OCR tekst + trainen -->
       <div class="raw-toggle" @click="showRaw = !showRaw">
         <span>OCR tekst {{ showRaw ? 'verbergen' : 'bekijken & trainen' }}</span>
         <span class="toggle-icon">{{ showRaw ? '▲' : '▼' }}</span>
@@ -61,7 +81,7 @@
 
       <div v-if="showRaw" class="train-section card">
         <p class="train-hint">
-          Tik op een regel om de preset te trainen — de app leert wat die regel betekent.
+          Tik op een regel om de preset <strong>{{ activePresetName }}</strong> te trainen.
         </p>
 
         <div
@@ -75,11 +95,8 @@
           <span v-if="trainedLines.has(i)" class="trained-badge">✓</span>
         </div>
 
-        <!-- Markeer-menu -->
         <div v-if="selectedLine !== null" class="mark-menu">
-          <p class="mark-label">
-            "{{ ocrLines[selectedLine] }}" markeren als:
-          </p>
+          <p class="mark-label">"{{ ocrLines[selectedLine] }}" markeren als:</p>
           <div class="mark-buttons">
             <button v-for="opt in markOptions" :key="opt.type"
                     class="mark-btn" @click="trainLine(opt.type)">
@@ -121,6 +138,9 @@ const result = computed(() => receipts.scanResult);
 const saving = ref(false);
 const error = ref(null);
 const showRaw = ref(false);
+const showNewPreset = ref(false);
+const newPresetName = ref('');
+const activePresetId = ref(1);
 const selectedLine = ref(null);
 const trainedLines = ref(new Set());
 const trainFeedback = ref('');
@@ -135,18 +155,27 @@ const markOptions = [
 ];
 
 const form = ref({
-  store_name: '',
-  receipt_date: '',
-  total_amount: '',
-  items: [],
-  loyalty_points: null
+  store_name: '', receipt_date: '', total_amount: '',
+  items: [], loyalty_points: null
 });
 
 const ocrLines = computed(() =>
   (result.value?.raw_text || '').split('\n').map(l => l.trim()).filter(Boolean)
 );
 
-onMounted(() => {
+const activePresetName = computed(() =>
+  presetsStore.list.find(p => p.id === activePresetId.value)?.name || 'Onbekend'
+);
+
+onMounted(async () => {
+  // Zorg dat presets altijd geladen zijn
+  if (presetsStore.list.length === 0) await presetsStore.fetchAll();
+
+  // Als er helemaal geen presets zijn: toon direct het aanmaken-formulier
+  if (presetsStore.list.length === 0) {
+    showNewPreset.value = true;
+  }
+
   if (!result.value?.parsed) return;
   const p = result.value.parsed;
   form.value.store_name     = p.store_name   || '';
@@ -154,6 +183,12 @@ onMounted(() => {
   form.value.total_amount   = p.total_amount != null ? p.total_amount : '';
   form.value.items          = p.items         || [];
   form.value.loyalty_points = p.loyalty_points || null;
+
+  // Gebruik de preset die de parser heeft gedetecteerd, anders de eerste beschikbare
+  activePresetId.value = p.preset_id
+    || presetsStore.list[0]?.id
+    || 1;
+
   if (p.confidence === 'low') showRaw.value = true;
 });
 
@@ -166,6 +201,30 @@ function fmt(n) {
   return parseFloat(n).toFixed(2).replace('.', ',');
 }
 
+async function createPreset() {
+  if (!newPresetName.value.trim()) return;
+  try {
+    const { data } = await api.post('/presets', {
+      name: newPresetName.value.trim(),
+      config: {
+        store_name_keywords: [],
+        fields: {
+          total_amount: true,
+          items: false,
+          receipt_date: true,
+          loyalty_points: { enabled: false }
+        }
+      }
+    });
+    presetsStore.list.push(data);
+    activePresetId.value = data.id;
+    showNewPreset.value = false;
+    newPresetName.value = '';
+  } catch {
+    error.value = 'Preset aanmaken mislukt.';
+  }
+}
+
 function selectLine(i) {
   selectedLine.value = selectedLine.value === i ? null : i;
   trainFeedback.value = '';
@@ -173,26 +232,20 @@ function selectLine(i) {
 
 async function trainLine(type) {
   const line = ocrLines.value[selectedLine.value];
-  const presetId = result.value?.parsed?.preset_id || 1;
-
   try {
-    const { data } = await api.post(`/presets/${presetId}/train`, { line, type });
+    const { data } = await api.post(`/presets/${activePresetId.value}/train`, { line, type });
     trainedLines.value.add(selectedLine.value);
     trainFeedbackType.value = 'ok';
-
     const labels = {
-      store_name:      `Winkelnaam "${line}" toegevoegd aan keywords`,
+      store_name:      `Winkelnaam "${line}" geleerd`,
       total:           `Totaalbedrag-patroon geleerd`,
       item:            `Artikelregels ingeschakeld`,
       loyalty_points:  `Punten regex: ${data.learned?.regex || 'geleerd'}`,
       loyalty_balance: `Saldo regex: ${data.learned?.regex || 'geleerd'}`,
     };
     trainFeedback.value = labels[type] || 'Preset bijgewerkt';
-
-    // Reload presets zodat de wijziging direct zichtbaar is
     presetsStore.list = [];
     await presetsStore.fetchAll();
-
     setTimeout(() => { selectedLine.value = null; trainFeedback.value = ''; }, 2000);
   } catch (err) {
     trainFeedbackType.value = 'err';
@@ -226,6 +279,28 @@ async function save() {
 
 <style scoped>
 .back-btn { font-size: 20px; text-decoration: none; color: var(--gray-800); }
+
+.preset-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+}
+.preset-bar-label { font-size: 13px; font-weight: 700; color: var(--gray-600); white-space: nowrap; }
+.preset-select { flex: 1; padding: 8px 10px; font-size: 14px; }
+.new-preset-btn {
+  flex-shrink: 0;
+  width: 32px; height: 32px;
+  border: none; border-radius: 8px;
+  font-size: 18px; font-weight: 700;
+  cursor: pointer; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--blue); color: #fff;
+}
+.new-preset-btn.save { background: var(--green); font-size: 14px; }
+.new-preset-btn.cancel { background: var(--gray-200); color: var(--gray-800); font-size: 14px; }
+.new-preset-btn:disabled { opacity: .4; cursor: not-allowed; }
 
 .confidence-badge {
   font-size: 13px; padding: 8px 14px; border-radius: 8px;
@@ -267,7 +342,6 @@ async function save() {
   padding: 10px 0; margin-bottom: 4px; font-weight: 600;
 }
 .toggle-icon { font-size: 11px; }
-
 .train-section { margin-bottom: 16px; }
 .train-hint { font-size: 13px; color: var(--gray-600); margin: 0 0 12px; }
 
@@ -275,8 +349,7 @@ async function save() {
   display: flex; justify-content: space-between; align-items: center;
   padding: 8px 10px; border-radius: 8px; cursor: pointer;
   font-size: 13px; font-family: monospace;
-  transition: background .1s;
-  border: 1.5px solid transparent;
+  border: 1.5px solid transparent; transition: background .1s;
 }
 .ocr-line:hover { background: var(--gray-100); }
 .ocr-line.selected { background: #eff6ff; border-color: var(--blue); }
@@ -286,8 +359,7 @@ async function save() {
 
 .mark-menu {
   background: var(--gray-50); border-radius: var(--radius);
-  padding: 12px; margin-top: 8px;
-  border: 1px solid var(--gray-200);
+  padding: 12px; margin-top: 8px; border: 1px solid var(--gray-200);
 }
 .mark-label { font-size: 13px; color: var(--gray-600); margin: 0 0 10px; font-style: italic; }
 .mark-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
