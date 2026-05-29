@@ -23,7 +23,7 @@ export const useReceiptsStore = defineStore('receipts', {
         this.loading = false;
       }
     },
-    async scan(file, presetId) {
+    async scan(file, presetId, documentMode = true) {
       this.scanning = true;
       this.scanResult = null;
       this.error = null;
@@ -31,6 +31,7 @@ export const useReceiptsStore = defineStore('receipts', {
         const form = new FormData();
         form.append('image', file);
         form.append('preset_id', presetId);
+        form.append('scan_mode', documentMode ? 'document' : 'normal');
         const { data } = await api.post('/receipts/scan', form);
         this.scanResult = data;
         return data;

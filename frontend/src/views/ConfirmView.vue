@@ -53,12 +53,45 @@
         </div>
       </div>
 
-      <!-- Raw OCR tekst (inklapbaar) -->
+      <!-- OCR tekst + preset trainen -->
       <div class="raw-toggle" @click="showRaw = !showRaw">
-        <span>OCR ruwe tekst bekijken</span>
+        <span>OCR tekst {{ showRaw ? 'verbergen' : 'bekijken & trainen' }}</span>
         <span class="toggle-icon">{{ showRaw ? '▲' : '▼' }}</span>
       </div>
-      <div v-if="showRaw" class="raw-text card">{{ result.raw_text }}</div>
+
+      <div v-if="showRaw" class="train-section card">
+        <p class="train-hint">
+          Tik op een regel om de preset te trainen — de app leert wat die regel betekent.
+        </p>
+
+        <div
+          v-for="(line, i) in ocrLines"
+          :key="i"
+          class="ocr-line"
+          :class="{ selected: selectedLine === i, trained: trainedLines.has(i) }"
+          @click="selectLine(i)"
+        >
+          <span class="line-text">{{ line }}</span>
+          <span v-if="trainedLines.has(i)" class="trained-badge">✓</span>
+        </div>
+
+        <!-- Markeer-menu -->
+        <div v-if="selectedLine !== null" class="mark-menu">
+          <p class="mark-label">
+            "{{ ocrLines[selectedLine] }}" markeren als:
+          </p>
+          <div class="mark-buttons">
+            <button v-for="opt in markOptions" :key="opt.type"
+                    class="mark-btn" @click="trainLine(opt.type)">
+              {{ opt.label }}
+            </button>
+            <button class="mark-btn cancel" @click="selectedLine = null">Annuleren</button>
+          </div>
+          <p v-if="trainFeedback" class="train-feedback" :class="trainFeedbackType">
+            {{ trainFeedback }}
+          </p>
+        </div>
+      </div>
 
       <!-- Acties -->
       <div class="confirm-actions">
@@ -78,13 +111,28 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useReceiptsStore } from '../stores/receipts';
+import { usePresetsStore } from '../stores/presets';
+import api from '../api';
 
 const receipts = useReceiptsStore();
+const presetsStore = usePresetsStore();
 const router = useRouter();
 const result = computed(() => receipts.scanResult);
 const saving = ref(false);
 const error = ref(null);
 const showRaw = ref(false);
+const selectedLine = ref(null);
+const trainedLines = ref(new Set());
+const trainFeedback = ref('');
+const trainFeedbackType = ref('ok');
+
+const markOptions = [
+  { type: 'store_name',      label: '🏪 Winkelnaam' },
+  { type: 'total',           label: '💰 Totaalbedrag' },
+  { type: 'item',            label: '📦 Artikel' },
+  { type: 'loyalty_points',  label: '⭐ Punten verdiend' },
+  { type: 'loyalty_balance', label: '⭐ Puntensaldo' },
+];
 
 const form = ref({
   store_name: '',
@@ -94,15 +142,18 @@ const form = ref({
   loyalty_points: null
 });
 
+const ocrLines = computed(() =>
+  (result.value?.raw_text || '').split('\n').map(l => l.trim()).filter(Boolean)
+);
+
 onMounted(() => {
   if (!result.value?.parsed) return;
   const p = result.value.parsed;
-  form.value.store_name   = p.store_name   || '';
-  form.value.receipt_date = p.receipt_date || '';
-  form.value.total_amount = p.total_amount != null ? p.total_amount : '';
-  form.value.items        = p.items         || [];
+  form.value.store_name     = p.store_name   || '';
+  form.value.receipt_date   = p.receipt_date || '';
+  form.value.total_amount   = p.total_amount != null ? p.total_amount : '';
+  form.value.items          = p.items         || [];
   form.value.loyalty_points = p.loyalty_points || null;
-  // Open raw text automatically when confidence is low
   if (p.confidence === 'low') showRaw.value = true;
 });
 
@@ -113,6 +164,40 @@ const confidenceLabel = computed(() => {
 
 function fmt(n) {
   return parseFloat(n).toFixed(2).replace('.', ',');
+}
+
+function selectLine(i) {
+  selectedLine.value = selectedLine.value === i ? null : i;
+  trainFeedback.value = '';
+}
+
+async function trainLine(type) {
+  const line = ocrLines.value[selectedLine.value];
+  const presetId = result.value?.parsed?.preset_id || 1;
+
+  try {
+    const { data } = await api.post(`/presets/${presetId}/train`, { line, type });
+    trainedLines.value.add(selectedLine.value);
+    trainFeedbackType.value = 'ok';
+
+    const labels = {
+      store_name:      `Winkelnaam "${line}" toegevoegd aan keywords`,
+      total:           `Totaalbedrag-patroon geleerd`,
+      item:            `Artikelregels ingeschakeld`,
+      loyalty_points:  `Punten regex: ${data.learned?.regex || 'geleerd'}`,
+      loyalty_balance: `Saldo regex: ${data.learned?.regex || 'geleerd'}`,
+    };
+    trainFeedback.value = labels[type] || 'Preset bijgewerkt';
+
+    // Reload presets zodat de wijziging direct zichtbaar is
+    presetsStore.list = [];
+    await presetsStore.fetchAll();
+
+    setTimeout(() => { selectedLine.value = null; trainFeedback.value = ''; }, 2000);
+  } catch (err) {
+    trainFeedbackType.value = 'err';
+    trainFeedback.value = err.response?.data?.error || 'Trainen mislukt.';
+  }
 }
 
 async function save() {
@@ -143,11 +228,8 @@ async function save() {
 .back-btn { font-size: 20px; text-decoration: none; color: var(--gray-800); }
 
 .confidence-badge {
-  font-size: 13px;
-  padding: 8px 14px;
-  border-radius: 8px;
-  margin-bottom: 14px;
-  font-weight: 600;
+  font-size: 13px; padding: 8px 14px; border-radius: 8px;
+  margin-bottom: 14px; font-weight: 600;
 }
 .confidence-badge.high  { background: #dcfce7; color: var(--green); }
 .confidence-badge.medium { background: #fef9c3; color: #ca8a04; }
@@ -155,18 +237,14 @@ async function save() {
 
 .confirm-card { margin-bottom: 12px; }
 .confirm-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--gray-100);
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 0; border-bottom: 1px solid var(--gray-100);
 }
 .confirm-row:last-child { border-bottom: none; }
 .confirm-label { font-size: 13px; color: var(--gray-600); min-width: 100px; }
 .confirm-value { font-weight: 600; }
 .confirm-value.green { color: var(--green); }
 .confirm-row .input { flex: 1; padding: 8px 10px; font-size: 14px; }
-
 .amount-input-wrap { display: flex; align-items: center; gap: 6px; flex: 1; }
 .euro-sign { font-size: 15px; color: var(--gray-600); }
 .amount-input { flex: 1; }
@@ -175,38 +253,53 @@ async function save() {
 .items-header { margin-bottom: 8px; }
 .section-title { font-size: 14px; font-weight: 700; }
 .item-row {
-  display: flex;
-  justify-content: space-between;
-  padding: 6px 0;
-  font-size: 14px;
+  display: flex; justify-content: space-between;
+  padding: 6px 0; font-size: 14px;
   border-bottom: 1px solid var(--gray-100);
 }
 .item-row:last-child { border-bottom: none; }
-.item-desc { color: var(--gray-800); flex: 1; margin-right: 12px; }
+.item-desc { flex: 1; margin-right: 12px; }
 .item-price { font-weight: 600; white-space: nowrap; }
 
 .raw-toggle {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 13px;
-  color: var(--blue);
-  cursor: pointer;
-  padding: 10px 0;
-  margin-bottom: 4px;
-  font-weight: 600;
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 13px; color: var(--blue); cursor: pointer;
+  padding: 10px 0; margin-bottom: 4px; font-weight: 600;
 }
 .toggle-icon { font-size: 11px; }
-.raw-text {
-  font-size: 12px;
-  font-family: monospace;
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: var(--gray-600);
-  max-height: 200px;
-  overflow-y: auto;
-  margin-bottom: 16px;
+
+.train-section { margin-bottom: 16px; }
+.train-hint { font-size: 13px; color: var(--gray-600); margin: 0 0 12px; }
+
+.ocr-line {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 10px; border-radius: 8px; cursor: pointer;
+  font-size: 13px; font-family: monospace;
+  transition: background .1s;
+  border: 1.5px solid transparent;
 }
+.ocr-line:hover { background: var(--gray-100); }
+.ocr-line.selected { background: #eff6ff; border-color: var(--blue); }
+.ocr-line.trained { opacity: .6; }
+.line-text { flex: 1; word-break: break-all; }
+.trained-badge { font-size: 12px; color: var(--green); font-weight: 700; margin-left: 6px; }
+
+.mark-menu {
+  background: var(--gray-50); border-radius: var(--radius);
+  padding: 12px; margin-top: 8px;
+  border: 1px solid var(--gray-200);
+}
+.mark-label { font-size: 13px; color: var(--gray-600); margin: 0 0 10px; font-style: italic; }
+.mark-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.mark-btn {
+  padding: 7px 12px; border-radius: 8px; border: none;
+  background: var(--blue); color: #fff;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.mark-btn.cancel { background: var(--gray-200); color: var(--gray-800); }
+.train-feedback { font-size: 13px; margin: 10px 0 0; font-weight: 600; }
+.train-feedback.ok { color: var(--green); }
+.train-feedback.err { color: var(--red); }
 
 .confirm-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
 .empty { color: var(--gray-600); }

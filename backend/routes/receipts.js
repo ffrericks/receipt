@@ -10,7 +10,8 @@ router.post('/scan', auth, upload.single('image'), async (req, res, next) => {
     const ocr = require('../services/ocr');
     const parser = require('../services/parser');
     const imageProcessor = require('../services/imageProcessor');
-    const processedPath = await imageProcessor.process(req.file.path);
+    const mode = req.body.scan_mode === 'document' ? 'document' : 'normal';
+    const processedPath = await imageProcessor.process(req.file.path, mode);
     const rawText = await ocr.extract(processedPath);
     const presetId = req.body.preset_id ? parseInt(req.body.preset_id) : 1;
     const parsed = await parser.parse(rawText, presetId);
